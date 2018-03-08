@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Guardium REST-API Viewer</title>
+<style>
+HTML,BODY {
+	padding:0px;
+	margin:0px;
+	height:100%;
+	width:100%;
+	font-family: Arial, sans-serif;
+}
+.g-func-label {
+	font-height: 110%;
+	background-color: #f0f0f0;
+	font-weight: bold;
+}
+.g-folder, g-function {
+	padding: 0.25em 0;
+}
+.g-folder-name {
+	color: #0a7aa9;
+}
+.g-folder-icon {
+	height: 16px;
+	width:  16px;
+	background-color: #efef00;
+}
+.g-clickable {
+	cursor: pointer;
+}
+.g-container {
+	padding: 0 2em;
+}
+.g-selected {
+	background-color: #f0f0f0;
+}
+</style>
+<script type="text/javascript" src="Guardium-REST-API.json"></script>
+<script type="text/javascript"">
+var sTemplate_Folder  ='<div id="${id}" class="g-folder"><span class="g-clickable" onclick="toggleFolder(\'${id}\')"><span id="${id}-first" class="g-folder-icon g-clickable">[+]</span><span>&nbsp;</span><span class="g-folder-name">${entityName}</span></span><div class="g-container" style="display:none"></div></div>';
+var sTemplate_Function='<div id="${id}" class="g-function g-clickable" onclick="viewFunction(\'${id}\')"><span class="g-function-icon">&nbsp;</span><span class="g-function-name">${entityName}</span></div>';
+
+function doLoad()
+{
+	showLoading(0);
+	setTimeout(loadJson, 0);
+}
+
+function loadJson()
+{
+	var oHasElement = {};
+	var oNavPanel   = document.getElementById('nav-panel');
+	var reWhiteSpc  = / */g;
+	var oNode       = document.createElement('div');
+
+	// APP_NAME > REST_RESOURCE > FUNCTION_NAME
+	for (var i=0; i<oJson.length; i++){
+		
+		// create category
+		var sFolderId = 'f-' + oJson[i]['APP_NAME'].replace(reWhiteSpc, '');
+		if (!oHasElement[ sFolderId ]) {
+			// no category yet, create it
+			oNode.innerHTML = generateHtml(sTemplate_Folder, {"id":sFolderId, "entityName":oJson[i]['APP_NAME']});
+			oNavPanel.appendChild(oNode.firstChild);
+			oHasElement[ sFolderId ] = true;
+		}
+
+		// create category
+		var sResourceId = sFolderId + '-' + oJson[i]['REST_RESOURCE'].replace(reWhiteSpc, '');
+		if (!oHasElement[ sResourceId ]) {
+			// no category yet, create it
+			oNode.innerHTML = generateHtml(sTemplate_Folder, {"id":sResourceId, "entityName":oJson[i]['REST_RESOURCE']});
+			document.getElementById(sFolderId).lastChild.appendChild(oNode.firstChild);
+			oHasElement[ sResourceId ] = true;
+		}
+
+		// finally, create lowest level element
+		var sFunctionId = sResourceId + '-' + oJson[i]['FUNCTION_NAME'].replace(reWhiteSpc, '');
+		if (!oHasElement[ sFunctionId ]) {
+			// no function yet, create it
+			oNode.innerHTML = generateHtml(sTemplate_Function, {"id":sFunctionId, "entityName":oJson[i]['FUNCTION_NAME']});
+			var oFuncElem = document.getElementById(sResourceId).lastChild.appendChild(oNode.firstChild);
+			oFuncElem.setAttribute('json', JSON.stringify(oJson[i]));
+			oHasElement[ sFunctionId ] = true;
+		}
+	}
+	// done!
+	showLoading(-1);
+}
+
+function showLoading(nDots)
+{
+	var sHtml = "Loading";
+	if (nDots > 3) nDots=0;
+	if (nDots < 0) {
+		clearTimeout( window.nTimeout );
+		sHtml = "Open folders on left to examine REST-API context and contents";
+	} else {
+		for (var i=0; i<nDots; i++)
+			sHtml += '.';
+		window.nTimeout = setTimeout(function(){showLoading(nDots++)},500);
+	}
+	document.getElementById('view-panel').innerHTML = sHtml;
+}
+
+function toggleFolder(sId)
+{
+	console.log("Toggle folder: " + sId);
+	oElem  = document.getElementById(sId);
+	oFirst = document.getElementById(sId + '-first');
+	fClosed = (oFirst.innerHTML.indexOf('+') != -1);
+	oFirst.innerHTML = fClosed ? '[-]' : '[+]';
+	oElem.lastChild.style.display = fClosed ? 'block':'none';
+}
+
+function viewFunction(sId)
+{
+	var oElem = document.getElementById(sId);
+	var oData = JSON.parse(oElem.getAttribute('json'));
+
+	asHtml = [];
+	asHtml.push('<h3>Function Details</h3><table border="1" rules="cols" cellspacing="0" cellpadding="2">');
+	for (var sKey in oData) {
+		if ('object' != typeof(oData[sKey]) && 'PARAMETERS' != sKey) {
+			asHtml.push('<tr><td class="g-func-label">' + sKey + '</td><td>' + oData[sKey] + '</td></tr>');
+		}
+	}
+	asHtml.push('</table>');
+
+	var asParams = oData['PARAMETERS'];
+	asHtml.push('<br/><hr/><h3>Parameters</h3>');
+	if (asParams.length) {
+		asHtml.push('<table border="1" rules="rows" cellspacing="0" cellpadding="2"><thead><tr>');
+		// title
+		for (sKey in asParams[0]) {
+			asHtml.push('<th class="g-func-label">' + sKey + '</th>');
+		}
+		asHtml.push('</tr></thead><tbody>');
+		for (var i=0; i<asParams.length; i++) {
+			asHtml.push('<tr>');
+			for (sKey in asParams[i]) {
+				asHtml.push('<td>' + asParams[i][sKey] + '</td>');
+			}
+			asHtml.push('</tr>');
+		}
+		asHtml.push('</tbody></table>');
+	} else {
+		asHtml.push('<div>None</div>');
+	}
+
+	if (window.sSelectedId) {
+		var oSelected = document.getElementById(window.sSelectedId);
+		var asClass   = oSelected.className.split(' ');
+		var sClass    = '';
+		for (var j=0; j<asClass.length; j++){
+			if ('g-selected' != asClass[j])
+				sClass += asClass[j];
+		}
+		oSelected.className = sClass;
+	}
+	oElem.className += ' g-selected';
+	window.sSelectedId = sId;
+	document.getElementById('view-panel').innerHTML = asHtml.join('');
+	document.getElementById('view-panel').scrollIntoView();
+}
+
+function generateHtml(sTemplate, oData)
+{
+	// use template with different data
+	var sHtml = sTemplate;
+	for (var sKey in oData){
+		oRegEx = new RegExp('(\\$\\{' + sKey + '\\})', 'gi');
+		sHtml  = sHtml.replace(oRegEx, oData[sKey]);
+	}
+	return sHtml;
+}
+</script>
+</head>
+<body onload="doLoad()">
+<h2>Guardium REST-API Viewer</h2>
+<table border="0" rules="cols" cellspacing="0" cellpadding="4" style="width:100%"><tr><td valign="top"><div id="nav-panel" style="overflow:auto"></div></td><td id="view-panel" valign="top"></td></tr></table>
+</body>
+</html>
